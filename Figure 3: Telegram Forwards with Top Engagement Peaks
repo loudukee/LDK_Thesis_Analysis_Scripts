@@ -1,0 +1,43 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
+# Load data
+file_path = '/Users/loudukee/Desktop/UVA/ERP/Rclone/ERP Raw Data/louise/all_tg_forward_edgelist.csv'
+tg_forwards = pd.read_csv(file_path)
+
+# Convert 'date' to datetime (which may include timezone)
+tg_forwards['date'] = pd.to_datetime(tg_forwards['date'])
+
+# Group by month (using 'ME' to avoid warning)
+tg_monthly = tg_forwards.groupby(pd.Grouper(key='date', freq='ME')).size()
+
+# Remove timezone info from the index to make it naive
+tg_monthly.index = tg_monthly.index.tz_localize(None)
+
+# Filter starting from Dec 2021
+start_date = pd.to_datetime('2021-12-01')
+tg_monthly = tg_monthly[tg_monthly.index >= start_date]
+
+# Get top 5 peak months
+top_peaks = tg_monthly.sort_values(ascending=False).head(5)
+
+# Plot
+plt.figure(figsize=(12,6))
+plt.plot(tg_monthly.index, tg_monthly.values, label='Monthly forwards', color='blue')
+plt.scatter(top_peaks.index, top_peaks.values, color='red', zorder=5, label='Top peaks')
+
+plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+plt.xticks(rotation=45, ha='right')
+
+plt.xlim(start_date, tg_monthly.index[-1])
+
+plt.title('Monthly Telegram forwards with Top Engagement Peaks')
+plt.xlabel('Date')
+plt.ylabel('Number of forwards')
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.5)
+plt.tight_layout()
+plt.savefig('tg_forwards_monthly_peaks.png', dpi=300)
+plt.show()
