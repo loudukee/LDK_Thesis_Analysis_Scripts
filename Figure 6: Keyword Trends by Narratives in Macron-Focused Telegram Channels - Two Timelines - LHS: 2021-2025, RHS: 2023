@@ -1,0 +1,70 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
+
+df = pd.read_parquet('/Users/loudukee/Desktop/UVA/ERP/Rclone/ERP Raw Data/louise/3A_5MACRONFLUENCERS_EXPERIMENT/5macronfluencers.pqt')
+df['message_text'] = df['message_text'].astype(str).str.lower()
+
+narratives = {
+    "Pension Reform": [
+        "retraite", "réforme", "pension", "âge de la retraite", "retraite à 64", "retraite à soixante-quatre"
+    ],
+    "EU Austerity": [
+        "union européenne", "ue", "bruxelles", "austérité", "neolibéralisme", "programme européen"
+    ],
+    "Economic Sovereignty": [
+        "souveraineté économique", "souveraineté", "économie sacrifiée", "perte de souveraineté"
+    ]
+}
+
+def count_mentions(text, keywords):
+    count = 0
+    for kw in keywords:
+        count += len(re.findall(r'\b' + re.escape(kw.lower()) + r'\b', text))
+    return count
+
+for narrative, keywords in narratives.items():
+    df[narrative] = df['message_text'].apply(lambda x: count_mentions(x, keywords))
+
+df['message_date'] = pd.to_datetime(df['message_date'], errors='coerce')
+df = df.dropna(subset=['message_date'])
+df['month'] = df['message_date'].dt.to_period('M')
+
+monthly_counts = df.groupby('month')[list(narratives.keys())].sum()
+
+full_min = monthly_counts.min()
+full_max = monthly_counts.max()
+monthly_norm_full = (monthly_counts - full_min) / (full_max - full_min)
+
+monthly_2023 = monthly_counts.loc['2023-01':'2023-12']
+year_min = monthly_2023.min()
+year_max = monthly_2023.max()
+monthly_norm_2023 = (monthly_2023 - year_min) / (year_max - year_min)
+
+fig, axes = plt.subplots(1, 2, figsize=(20, 7), sharey=True)
+
+monthly_norm_full.plot(ax=axes[0], linewidth=2, colormap='tab10')
+axes[0].set_title("Narrative Keyword Trends in Macron-Focused Telegram Discourse\n(Normalised Across Full Timeline)", fontsize=14)
+axes[0].set_xlabel("Month")
+axes[0].set_ylabel("Normalised Mention Frequency")
+axes[0].legend(title="Narratives", fontsize=10)
+axes[0].grid(True, alpha=0.3)
+
+monthly_norm_2023.plot(ax=axes[1], linewidth=2, colormap='tab10')
+axes[1].set_title("Narrative Keyword Salience During 2023 Pension Reform Protests\n(Normalised Within Year)", fontsize=14)
+axes[1].set_xlabel("Month")
+axes[1].set_ylabel("")
+axes[1].legend().remove()
+axes[1].grid(True, alpha=0.3)
+
+narrative_keywords_text = (
+    "Keyword themes:\n"
+    "• Pension Reform: retraite, réforme, pension, âge de la retraite, retraite à 64, retraite à soixante-quatre\n"
+    "• EU Austerity: union européenne, ue, bruxelles, austérité, neolibéralisme, programme européen\n"
+    "• Economic Sovereignty: souveraineté économique, souveraineté, économie sacrifiée, perte de souveraineté"
+)
+fig.text(0.5, -0.05, narrative_keywords_text, ha='center', fontsize=11, style='italic', wrap=True)
+
+plt.tight_layout(rect=[0, 0.08, 1, 1])
+plt.savefig("macron_telegram_narrative_keywords_2023.png", dpi=300, bbox_inches='tight')
+plt.show()
