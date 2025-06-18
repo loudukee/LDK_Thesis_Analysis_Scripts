@@ -1,0 +1,61 @@
+import pandas as pd
+from collections import Counter
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+import nltk
+import re
+from nltk.corpus import stopwords
+
+nltk.download('punkt')
+nltk.download('stopwords')
+
+stop_words = set(stopwords.words('french'))
+macron_keywords = {"macron", "emmanuel"}
+excluded_words = macron_keywords.union({"président"})
+
+df = pd.read_parquet('/Users/loudukee/Desktop/UVA/ERP/Rclone/ERP Raw Data/louise/3A_5MACRONFLUENCERS_EXPERIMENT/5macronfluencers.pqt')
+df['message_text'] = df['message_text'].astype(str).str.lower()
+
+text = " ".join(df['message_text'].dropna())
+text = re.sub(r"http\S+|www\S+|[^a-zA-ZÀ-ÿ\s]", " ", text)
+
+tokens = nltk.word_tokenize(text)
+
+window_size = 5
+collocates = []
+
+for i, word in enumerate(tokens):
+    if word in macron_keywords:
+        start = max(i - window_size, 0)
+        end = min(i + window_size + 1, len(tokens))
+        context = tokens[start:i] + tokens[i+1:end]
+        collocates.extend(context)
+
+filtered_collocates = [
+    word for word in collocates
+    if word not in stop_words and word not in excluded_words and len(word) > 2
+]
+
+collocate_counts = Counter(filtered_collocates)
+top_collocates = dict(collocate_counts.most_common(200))
+
+wordcloud = WordCloud(
+    width=1400,
+    height=700,
+    background_color='white',
+    colormap='inferno',
+    max_words=200,
+    relative_scaling=0.5,
+    prefer_horizontal=0.9
+).generate_from_frequencies(top_collocates)
+
+anchor_words = ["macron", "emmanuel"]
+
+plt.figure(figsize=(16, 8))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis('off')
+plt.title("Co-Occurring Language with Macron-Related Keywords", fontsize=22, pad=20)
+plt.gcf().text(0.5, 0.02, "Anchor words used: " + ", ".join(anchor_words), ha='center', fontsize=14, style='italic')
+plt.tight_layout(rect=[0, 0.05, 1, 1])
+plt.savefig("macron_collocates_wordcloud.png", dpi=300, bbox_inches='tight')
+plt.show()
