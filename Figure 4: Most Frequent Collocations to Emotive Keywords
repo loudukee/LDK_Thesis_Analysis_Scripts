@@ -1,0 +1,47 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from collections import Counter
+import re
+import string
+
+path = "/Users/loudukee/Desktop/UVA/ERP/Rclone/ERP Raw Data/louise/2C_TOP10DISINFLUENCERS_EXPERIMENT/10disinfluencers.pqt"
+df = pd.read_parquet(path)
+
+emotion_lexicon = {
+    "colère": ["haine", "trahison", "corruption", "escroquerie", "abus", "mensonge", "injustice"],
+    "peur": ["guerre", "effondrement", "menace", "danger", "crise", "apocalypse", "panique"],
+    "tristesse": ["perte", "souffrance", "désespoir", "mort", "chômage", "solitude"],
+    "dégoût": ["propagande", "manipulation", "diktat", "censure", "dictature", "élite"],
+    "espoir": ["résistance", "vérité", "réveil", "justice", "liberté", "courage"]
+}
+
+emotion_words = {word: emotion for emotion, words in emotion_lexicon.items() for word in words}
+
+def clean_tokens(text):
+    text = str(text).lower()
+    text = re.sub(r"http\S+|www\S+", "", text)
+    text = text.translate(str.maketrans("", "", string.punctuation))
+    return text.split()
+
+df['tokens'] = df['message_text'].apply(clean_tokens)
+
+emotion_counts = Counter()
+for tokens in df['tokens']:
+    for token in tokens:
+        if token in emotion_words:
+            emotion_counts[token] += 1
+
+emotion_df = pd.DataFrame(emotion_counts.items(), columns=['keyword', 'count'])
+emotion_df['emotion'] = emotion_df['keyword'].map(emotion_words)
+emotion_df = emotion_df.sort_values(by='count', ascending=False)
+
+plt.figure(figsize=(10, 6))
+sns.barplot(data=emotion_df, y='keyword', x='count', hue='emotion', palette='muted')
+plt.title("Most Frequent Emotion-Laden Keywords")
+plt.xlabel("Frequency")
+plt.ylabel("Keyword")
+plt.legend(title="Emotion", bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+plt.savefig("emotion_keyword_frequency.png")
+plt.show()
