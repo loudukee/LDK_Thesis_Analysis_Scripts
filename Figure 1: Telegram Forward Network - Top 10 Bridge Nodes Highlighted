@@ -1,0 +1,50 @@
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.patches as mpatches
+from adjustText import adjust_text 
+
+nodes_df = pd.read_csv("/Users/loudukee/Desktop/UVA/ERP/Rclone/ERP Raw Data/louise/all_tg_forward_nodes.csv")
+edges_df = pd.read_csv("/Users/loudukee/Desktop/UVA/ERP/Rclone/ERP Raw Data/louise/all_tg_forward_edgelist.csv")
+G = nx.from_pandas_edgelist(edges_df, source='source', target='target', create_using=nx.DiGraph())
+nodes_df = nodes_df.drop_duplicates(subset='Id')
+attrs = nodes_df.set_index('Id')[['display_name', 'subscribers']].to_dict('index')
+nx.set_node_attributes(G, attrs)
+degree_centrality = nx.degree_centrality(G)
+betweenness_centrality = nx.betweenness_centrality(G)
+nx.set_node_attributes(G, degree_centrality, "degree_centrality")
+nx.set_node_attributes(G, betweenness_centrality, "betweenness_centrality")
+top_bridge_ids = [n for n, _ in sorted(betweenness_centrality.items(), key=lambda x: x[1], reverse=True)[:10]]
+nodes_to_include = set(top_bridge_ids)
+for node in list(top_bridge_ids):
+    nodes_to_include.update(G.successors(node))
+    nodes_to_include.update(G.predecessors(node))
+H = G.subgraph(nodes_to_include).copy()
+for node in H.nodes:
+    H.nodes[node]['bridge_role'] = node in top_bridge_ids
+pos = nx.kamada_kawai_layout(H)
+
+subs = [H.nodes[n].get('subscribers', 1000) for n in H.nodes]
+subs_log = [np.log10(s + 1) for s in subs]
+node_sizes = [60 * val for val in subs_log]
+node_colors = ['red' if H.nodes[n].get('bridge_role', False) else 'skyblue' for n in H.nodes]
+plt.figure(figsize=(13, 11))
+nx.draw_networkx_edges(H, pos, alpha=0.3, edge_color='gray')
+nx.draw_networkx_nodes(H, pos, node_size=node_sizes, node_color=node_colors, alpha=0.9)
+texts = []
+for node in top_bridge_ids:
+    if node in H.nodes:
+        x, y = pos[node]
+        label = H.nodes[node].get('display_name', str(node))
+        texts.append(plt.text(x, y, label, fontsize=9, weight='bold'))
+adjust_text(texts, arrowprops=dict(arrowstyle='->', color='black', lw=0.7), expand_points=(1.2, 1.4))
+red_patch = mpatches.Patch(color='red', label='Top 10 Bridge Nodes')
+blue_patch = mpatches.Patch(color='skyblue', label='Other Nodes')
+plt.legend(handles=[red_patch, blue_patch], loc='upper right', frameon=True)
+plt.title("Telegram Forward Network — Top 10 Bridge Nodes Highlighted", fontsize=15)
+plt.axis('off')
+plt.tight_layout()
+# plt.savefig("telegram_network_top10_bridges.svg", format='svg')
+plt.show()
+plt.savefig("telegram_network_simplified.pdf", format='pdf')
