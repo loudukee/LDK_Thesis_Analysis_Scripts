@@ -1,0 +1,60 @@
+import pandas as pd
+import nltk
+import re
+from collections import Counter
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+
+nltk.download('punkt')
+nltk.download('stopwords')
+
+df = pd.read_parquet('/Users/loudukee/Desktop/UVA/ERP/Rclone/ERP Raw Data/louise/3A_5MACRONFLUENCERS_EXPERIMENT/5macronfluencers.pqt')
+df['message_text'] = df['message_text'].astype(str).str.lower()
+
+stop_words = set(nltk.corpus.stopwords.words('french'))
+emotional_terms = {"guerre", "défense", "résistance"}
+
+text = " ".join(df['message_text'].dropna())
+text = re.sub(r"http\S+|www\S+|[^a-zA-ZÀ-ÿ\s]", " ", text)
+
+tokens = nltk.word_tokenize(text)
+
+window_size = 5
+collocates = []
+
+for i, word in enumerate(tokens):
+    if word in emotional_terms:
+        start = max(i - window_size, 0)
+        end = min(i + window_size + 1, len(tokens))
+        context = tokens[start:i] + tokens[i+1:end]
+        collocates.extend(context)
+
+filtered_collocates = [
+    word for word in collocates
+    if word not in stop_words and word not in emotional_terms and len(word) > 2
+]
+
+collocate_counts = Counter(filtered_collocates)
+top_collocates = dict(collocate_counts.most_common(300))
+
+wordcloud = WordCloud(
+    width=1400,
+    height=700,
+    background_color='white',
+    colormap='inferno',
+    max_words=300,
+    relative_scaling=0.6,
+    prefer_horizontal=0.9
+).generate_from_frequencies(top_collocates)
+
+plt.figure(figsize=(16, 8))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis('off')
+plt.title("Mapping Collocations of Emotional Political Vocabulary in Macron Telegram Groups", fontsize=22, pad=20)
+
+legend_text = "Emotional terms used as anchors: " + ", ".join(emotional_terms)
+plt.gcf().text(0.5, 0.02, legend_text, ha='center', fontsize=14, style='italic')
+
+plt.tight_layout(rect=[0, 0.05, 1, 1])
+plt.savefig("macron_emotional_collocations_wordcloud.png", dpi=300, bbox_inches='tight')
+plt.show()
