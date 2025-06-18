@@ -1,0 +1,81 @@
+import pandas as pd
+import nltk
+import re
+import unicodedata
+from collections import Counter
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+
+nltk.download('punkt')
+nltk.download('stopwords')
+
+df = pd.read_parquet('/Users/loudukee/Desktop/UVA/ERP/Rclone/ERP Raw Data/louise/3A_5MACRONFLUENCERS_EXPERIMENT/5macronfluencers.pqt')
+df['message_text'] = df['message_text'].astype(str).str.lower()
+
+def strip_accents(text):
+    return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
+
+raw_text = " ".join(df['message_text'].dropna())
+cleaned_text = strip_accents(raw_text)
+cleaned_text = re.sub(r"http\S+|www\S+|[^a-zA-ZÀ-ÿ\s]", " ", cleaned_text)
+tokens = nltk.word_tokenize(cleaned_text)
+
+anchor_terms = {
+    "menace", "menacee", "menacees", "danger", "attaque", "attaquee", "attaques", "urgence",
+    "effondrement", "alerte", "peril", "crise", "detruit", "detruire",
+    "culture", "valeurs", "civilisation", "identite", "tradition", "racines",
+    "heritage", "nation", "francais", "france",
+    "proteger", "defendre", "defendez", "sauver", "reagir", "revolte", "soutenir", "reveiller",
+    "enfants", "famille", "innocents", "avenir", "menaces", "abus", "endoctrinement",
+    "laicite", "religion", "islam", "mosquee", "charia", "voile", "segregation", "mixite"
+}
+
+stop_words = set(nltk.corpus.stopwords.words('french'))
+custom_excludes = stop_words.union({"la", "le", "les", "des", "en", "pour", "avec", "dans", "nos", "vos", "ces"})
+
+window_size = 10
+collocates = []
+
+for i, token in enumerate(tokens):
+    if token in anchor_terms:
+        start = max(0, i - window_size)
+        end = min(len(tokens), i + window_size + 1)
+        window = tokens[start:end]
+        for word in window:
+            if word not in custom_excludes and len(word) > 2:
+                collocates.append(word)
+
+collocate_counts = Counter(collocates)
+top_collocates = dict(collocate_counts.most_common(300))
+
+if not top_collocates:
+    raise ValueError("No valid collocates found.")
+
+wordcloud = WordCloud(
+    width=1400,
+    height=700,
+    background_color='white',
+    colormap='inferno',
+    max_words=300,
+    relative_scaling=0.6,
+    prefer_horizontal=0.9
+).generate_from_frequencies(top_collocates)
+
+plt.figure(figsize=(16, 8))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis('off')
+plt.title("Mapping Collocations of Emotional and Cultural Threat Language in Macron Telegram Groups", fontsize=22, pad=20)
+
+legend_text = (
+    "Anchor terms: menace, menacee, menacees, danger, attaque, attaquee, attaques, urgence, "
+    "effondrement, alerte, peril, crise, detruit, detruire, culture, valeurs, civilisation, identite, tradition, "
+    "racines, heritage, nation, francais, france, proteger, defendre, defendez, sauver, reagir, revolte, soutenir, "
+    "reveiller, enfants, famille, innocents, avenir, menaces, abus, endoctrinement, laicite, religion, islam, mosquee, "
+    "charia, voile, segregation, mixite"
+)
+
+plt.gcf().text(0.5, 0.05, legend_text, ha='center', fontsize=12, style='italic', wrap=True)
+
+plt.tight_layout(rect=[0, 0.1, 1, 1])
+plt.savefig("macron_telegram_collocations.png", dpi=300, bbox_inches='tight')
+plt.show()
